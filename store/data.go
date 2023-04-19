@@ -5,27 +5,22 @@ import (
 	"io"
 )
 
-type Data struct {
-	m map[string]string
+type Data map[string]string
+
+func (data Data) Set(key string, val string) {
+	data[key] = val
 }
 
 func NewData() *Data {
-	return &Data{
-		m: map[string]string{},
-	}
+	return &Data{}
 }
 
-func (d *Data) Persist(w io.Writer) error {
+func (data Data) Persist(w io.Writer) error {
 	encoder := codec.NewEncoder(w)
-	return encoder.Encode(d)
+	return encoder.Encode(data)
 }
 
-func RestoreData(r io.ReadCloser) (*Data, error) {
-	data := &Data{}
+func (data Data) Restore(r io.ReadCloser) error {
 	decoder := codec.NewDecoder(r)
-	err := decoder.Decode(data)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return decoder.Decode(&data)
 }

@@ -6,12 +6,13 @@ import (
 	"github.com/raylax/scheduled/node"
 	"github.com/raylax/scheduled/store"
 	"github.com/raylax/scheduled/transport"
+	"github.com/raylax/scheduled/types"
 	"github.com/raylax/scheduled/util"
 	"os"
 	"time"
 )
 
-const address = "127.0.0.1:7001"
+const listen = "127.0.0.1:7001"
 const dataPath = "data"
 
 func main() {
@@ -22,25 +23,28 @@ func main() {
 			panic(err)
 		}
 	}
+	logger := hclog.New(&hclog.LoggerOptions{
+		Name:  "RAFT",
+		Level: hclog.LevelFromString("debug"),
+	})
 
 	data := store.NewData()
-	fsm := store.NewFSM(data)
-	logger := hclog.Default()
+	fsm := store.NewFSM(data, logger)
 
-	t, err := transport.NewTransport(address, logger)
+	t, err := transport.NewTransport(listen, logger)
 	if err != nil {
 		panic(err)
 	}
 
-	id := raft.ServerID(address)
+	id := raft.ServerID(listen)
 
 	opts := node.Options{
 		ID:                id,
-		Address:           address,
+		Listen:            listen,
 		DataPath:          dataPath,
 		Logger:            logger,
 		Transport:         t,
-		SnapshotInterval:  20 * time.Second,
+		SnapshotInterval:  10 * time.Second,
 		SnapshotThreshold: 2,
 	}
 	n, err := node.New(opts, fsm)
@@ -62,9 +66,31 @@ func main() {
 	//	panic(err)
 	//}
 
+	go func() {
+		for {
+			time.Sleep(1 * time.Second)
+			logger.Info("store", "data", data)
+		}
+	}()
+
 	for {
-		leader := <-n.Raft.LeaderCh()
+		leader := <-n.LeaderCh
 		logger.Info("state change", "id", id, "leader", leader)
+		if leader {
+			go func() {
+				bytes, err := types.EncodeCommandRequest(types.CommandTypeSet, &types.CommandSet{
+					Key:   "a",
+					Value: "1",
+				})
+				if err != nil {
+					logger.Warn("encode command error", "err", err)
+					return
+				}
+
+				f := n.Raft.Apply(bytes, 0)
+				logger.Info("apply", "response", f.Response(), "err", f.Error())
+			}()
+		}
 	}
 
 }

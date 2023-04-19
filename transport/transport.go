@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-func NewTransport(address string, logger hclog.Logger) (*raft.NetworkTransport, error) {
-	addr, err := net.ResolveTCPAddr("tcp", address)
+func NewTransport(listen string, logger hclog.Logger) (*raft.NetworkTransport, error) {
+	address, err := net.ResolveTCPAddr("tcp", listen)
 	if err != nil {
 		return nil, err
 	}
 	transport, err := raft.NewTCPTransportWithLogger(
-		addr.String(),
-		addr,
+		address.String(),
+		address,
 		3,
 		10*time.Second,
 		logger,

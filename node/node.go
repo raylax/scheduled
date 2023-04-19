@@ -10,17 +10,18 @@ import (
 
 type Options struct {
 	ID        raft.ServerID
-	Address   string
+	Listen    string
 	DataPath  string
 	Logger    hclog.Logger
 	Transport raft.Transport
 
 	SnapshotInterval  time.Duration
-	SnapshotThreshold int
+	SnapshotThreshold uint64
 }
 
 type Node struct {
-	Raft *raft.Raft
+	Raft     *raft.Raft
+	LeaderCh <-chan bool
 }
 
 func New(opts Options, fsm raft.FSM) (*Node, error) {
@@ -43,11 +44,15 @@ func New(opts Options, fsm raft.FSM) (*Node, error) {
 	config := raft.DefaultConfig()
 	config.LocalID = opts.ID
 	config.Logger = opts.Logger
-	config.NotifyCh = make(chan bool)
+	notifyCh := make(chan bool)
+	config.NotifyCh = notifyCh
+	config.SnapshotThreshold = opts.SnapshotThreshold
+	config.SnapshotInterval = opts.SnapshotInterval
 
 	r, err := raft.NewRaft(config, fsm, logStore, stableStore, snapshotStore, opts.Transport)
 
 	return &Node{
-		Raft: r,
+		Raft:     r,
+		LeaderCh: notifyCh,
 	}, nil
 }

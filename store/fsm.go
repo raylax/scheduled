@@ -1,45 +1,52 @@
 package store
 
 import (
-	"bytes"
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
-	"github.com/raylax/scheduled/codec"
+	"github.com/raylax/scheduled/types"
 	"io"
 )
 
-type CommandRequest struct {
-}
-
-type CommandResponse struct {
-	Err error
-}
-
-var CommandResponseOK CommandResponse
-
 type FSM struct {
-	data *Data
+	data   *Data
+	logger hclog.Logger
 }
 
-func NewFSM(data *Data) *FSM {
-	return &FSM{data: data}
+func NewFSM(data *Data, logger hclog.Logger) *FSM {
+	return &FSM{data: data, logger: logger}
 }
 
 func (f *FSM) Apply(log *raft.Log) any {
 	switch log.Type {
 	case raft.LogCommand:
-		decoder := codec.NewDecoder(bytes.NewReader(log.Data))
-		var command CommandRequest
-		err := decoder.Decode(&command)
+		req, err := types.DecodeCommandRequest(log.Data)
 		if err != nil {
-			return err
+			return types.CommandResponse{Err: err}
 		}
-		return f.applyCommand(command)
+		err = f.applyCommand(req)
+		if err != nil {
+			return types.CommandResponse{Err: err}
+		}
+		return types.CommandResponseOK
 	}
 	return nil
 }
 
-func (f *FSM) applyCommand(command CommandRequest) CommandResponse {
-	return CommandResponseOK
+func (f *FSM) applyCommand(req *types.CommandRequest) error {
+	switch req.Type {
+	case types.CommandTypeSet:
+		command, err := types.DecodeCommand[types.CommandSet](req.Data)
+		if err != nil {
+			return err
+		}
+		return f.applySetCommand(command)
+	}
+	return nil
+}
+
+func (f *FSM) applySetCommand(command *types.CommandSet) error {
+	f.data.Set(command.Key, command.Value)
+	return nil
 }
 
 func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
@@ -47,10 +54,5 @@ func (f *FSM) Snapshot() (raft.FSMSnapshot, error) {
 }
 
 func (f *FSM) Restore(snapshot io.ReadCloser) error {
-	d, err := RestoreData(snapshot)
-	if err != nil {
-		return err
-	}
-	f.data = d
-	return nil
+	return f.data.Restore(snapshot)
 }
