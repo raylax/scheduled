@@ -52,19 +52,21 @@ func main() {
 		panic(err)
 	}
 
-	//config := raft.Configuration{
-	//	Servers: []raft.Server{
-	//		{
-	//			ID:      id,
-	//			Address: t.LocalAddr(),
-	//		},
-	//	},
-	//}
-	//
-	//cluster := n.Raft.BootstrapCluster(config)
-	//if err := cluster.Error(); err != nil {
-	//	panic(err)
-	//}
+	config := raft.Configuration{
+		Servers: []raft.Server{
+			{
+				ID:      id,
+				Address: t.LocalAddr(),
+			},
+		},
+	}
+
+	cluster := n.Raft.BootstrapCluster(config)
+
+
+	if err := cluster.Error(); err != nil {
+		panic(err)
+	}
 
 	go func() {
 		for {
